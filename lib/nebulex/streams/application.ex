@@ -8,6 +8,7 @@ defmodule Nebulex.Streams.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      {Registry, keys: :unique, name: Nebulex.Streams.Registry},
       {Phoenix.PubSub, name: Nebulex.Streams.PubSub}
     ]
 

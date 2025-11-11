@@ -15,13 +15,6 @@ defmodule Nebulex.Streams.MixProject do
 
       # Testing
       test_coverage: [tool: ExCoveralls],
-      preferred_cli_env: [
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "test.ci": :test
-      ],
 
       # Dialyzer
       dialyzer: dialyzer(),
@@ -39,6 +32,18 @@ defmodule Nebulex.Streams.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "test.ci": :test
+      ]
+    ]
+  end
+
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
@@ -51,7 +56,7 @@ defmodule Nebulex.Streams.MixProject do
 
   defp deps do
     [
-      {:nebulex, github: "elixir-nebulex/nebulex", branch: "main"},
+      {:nebulex, github: "elixir-nebulex/nebulex", branch: "main", override: true},
       {:nimble_options, "~> 0.5 or ~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:telemetry, "~> 0.4 or ~> 1.0"},
@@ -62,6 +67,8 @@ defmodule Nebulex.Streams.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},
       {:mimic, "~> 1.11", only: :test},
+      {:flame, "~> 0.5", only: :test},
+      {:nebulex_local, github: "elixir-nebulex/nebulex_local", branch: "main", only: :test},
 
       # Benchmark Test
       {:benchee, "~> 1.3", only: [:dev, :test]},
@@ -108,6 +115,6 @@ defmodule Nebulex.Streams.MixProject do
   end
 
   defp plt_file_name do
-    "dialyzer-#{Mix.env()}-#{System.version()}-#{System.otp_release()}.plt"
+    "dialyzer-#{Mix.env()}-Elixir-#{System.version()}-OTP-#{System.otp_release()}.plt"
   end
 end

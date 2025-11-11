@@ -3,8 +3,6 @@ defmodule Nebulex.Streams.Server do
 
   use GenServer
 
-  import Nebulex.Utils, only: [camelize_and_concat: 1]
-
   alias Nebulex.Streams
   alias Nebulex.Streams.Options
 
@@ -17,12 +15,6 @@ defmodule Nebulex.Streams.Server do
             broadcast_fun: nil,
             opts: nil
 
-  @typedoc "The type for the stream server metadata"
-  @type metadata() :: %{
-          required(:pubsub) => atom(),
-          required(:partitions) => non_neg_integer() | nil
-        }
-
   ## API
 
   @doc """
@@ -34,17 +26,7 @@ defmodule Nebulex.Streams.Server do
     {cache, opts} = Keyword.pop!(opts, :cache)
     {name, opts} = Keyword.pop(opts, :name)
 
-    GenServer.start_link(__MODULE__, {cache, name, opts}, name: server_name(name || cache))
-  end
-
-  @doc """
-  Returns the stream server metadata.
-  """
-  @spec get_metadata(atom()) :: metadata()
-  def get_metadata(name) do
-    name
-    |> server_name()
-    |> GenServer.call(:get_metadata)
+    GenServer.start_link(__MODULE__, {cache, name, opts})
   end
 
   ## GenServer callbacks
@@ -68,21 +50,22 @@ defmodule Nebulex.Streams.Server do
       opts: opts
     }
 
-    {:ok, state, {:continue, :register_listener}}
+    case Registry.register(Streams.registry(), Streams.server_name(name || cache), state) do
+      {:ok, _} ->
+        :ok = register_listener(state)
+
+        {:ok, state, {:continue, :registered}}
+
+      {:error, reason} ->
+        raise "Failed to register stream server: #{inspect(reason)}"
+    end
   end
 
   @impl true
-  def handle_continue(:register_listener, %__MODULE__{} = state) do
-    :ok = register_listener(state)
-
+  def handle_continue(:registered, %__MODULE__{} = state) do
     :ok = dispatch_telemetry_event(:listener_registered, state)
 
     {:noreply, state}
-  end
-
-  @impl true
-  def handle_call(:get_metadata, _from, %__MODULE__{} = state) do
-    {:reply, Map.take(state, [:pubsub, :partitions]), state}
   end
 
   @impl true
@@ -93,11 +76,6 @@ defmodule Nebulex.Streams.Server do
   end
 
   ## Private functions
-
-  # Inline common instructions
-  @compile {:inline, server_name: 1}
-
-  defp server_name(name), do: camelize_and_concat([__MODULE__, name])
 
   defp register_listener(%__MODULE__{cache: cache, name: name, opts: opts} = state) do
     listener = &Streams.broadcast_event/1

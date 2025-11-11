@@ -1,11 +1,6 @@
 defmodule Nebulex.StreamsTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   use Mimic
-
-  import Nebulex.Streams.TestUtils
-
-  alias Nebulex.Event.CacheEntryEvent
-  alias Nebulex.Streams
 
   defmodule Cache do
     use Nebulex.Cache,
@@ -14,6 +9,11 @@ defmodule Nebulex.StreamsTest do
 
     use Nebulex.Streams
   end
+
+  alias Nebulex.{Adapter, Streams}
+  alias Nebulex.Event.CacheEntryEvent
+
+  import Nebulex.Streams.TestUtils
 
   @moduletag capture_log: true
 
@@ -33,6 +33,19 @@ defmodule Nebulex.StreamsTest do
                      end
       end
     end
+
+    test "error: already registered" do
+      Process.flag(:trap_exit, true)
+
+      {:ok, cache_pid} = Cache.start_link()
+      {:ok, stream_pid} = Streams.start_link(cache: Cache)
+
+      assert {:error, {e, _}} = Streams.start_link(cache: Cache)
+      assert Exception.message(e) =~ "Failed to register stream server: {:already_registered"
+
+      safe_stop(stream_pid)
+      safe_stop(cache_pid)
+    end
   end
 
   describe "child_spec/1" do
@@ -44,20 +57,40 @@ defmodule Nebulex.StreamsTest do
     end
   end
 
+  describe "lookup_meta!/1" do
+    test "ok: returns metadata" do
+      {:ok, cache_pid} = Cache.start_link()
+      {:ok, stream_pid} = Streams.start_link(cache: Cache)
+
+      assert Streams.lookup_meta!(Cache) == %{
+               cache: Cache,
+               name: nil,
+               pubsub: Nebulex.Streams.PubSub,
+               partitions: nil
+             }
+
+      safe_stop(stream_pid)
+      safe_stop(cache_pid)
+    end
+
+    test "error: not found" do
+      assert_raise RuntimeError, ~r"Stream server not found: #{inspect(Cache)}", fn ->
+        Streams.lookup_meta!(Cache)
+      end
+    end
+  end
+
   describe "subscribe/1" do
     @event [:nebulex, :streams, :broadcast]
 
     setup do
-      {:ok, cache_pid} = Cache.start_link()
+      cache_pid = start_supervised!({Cache, []})
+      stream_pid = start_supervised!({Streams, cache: Cache})
 
-      on_exit(fn -> safe_stop(cache_pid) end)
-
-      {:ok, cache: Cache, cache_pid: cache_pid}
+      {:ok, cache: Cache, cache_pid: cache_pid, stream_pid: stream_pid}
     end
 
     test "ok: subscribes caller with defaults", %{cache: cache} do
-      {:ok, stream_pid} = Streams.start_link(cache: Cache)
-
       assert cache.subscribe() == :ok
 
       :ok = cache.put("foo", "bar")
@@ -84,13 +117,50 @@ defmodule Nebulex.StreamsTest do
                           event: %CacheEntryEvent{}
                         }}
       end)
+    end
 
-      safe_stop(stream_pid)
+    test "error: subscribe error", %{cache: cache} do
+      Phoenix.PubSub
+      |> expect(:subscribe, fn _, _ -> {:error, :error} end)
+
+      msg =
+        "Nebulex.Streams.subscribe(Nebulex.StreamsTest.Cache, " <>
+          "[events: [:deleted]]) failed with reason: :error"
+
+      assert_raise Nebulex.Error, "#{msg}", fn ->
+        cache.subscribe!(events: [:deleted])
+      end
+    end
+
+    test "error: broadcast error", %{cache: cache} do
+      Phoenix.PubSub
+      |> expect(:broadcast, fn _, _, _ -> {:error, :error} end)
+
+      with_telemetry_handler([@event], fn ->
+        :ok = cache.subscribe!()
+        :ok = cache.put("foo", "bar")
+
+        assert_receive {@event, %{},
+                        %{
+                          status: :error,
+                          reason: :error,
+                          pubsub: Nebulex.Streams.PubSub,
+                          topic: "Elixir.Nebulex.StreamsTest.Cache:inserted",
+                          event: %CacheEntryEvent{}
+                        }}
+      end)
+    end
+  end
+
+  describe "subscribe/2 [broadcast_fun: :broadcast_from]" do
+    setup do
+      cache_pid = start_supervised!({Cache, []})
+      stream_pid = start_supervised!({Streams, cache: Cache, broadcast_fun: :broadcast_from})
+
+      {:ok, cache: Cache, cache_pid: cache_pid, stream_pid: stream_pid}
     end
 
     test "ok: subscribes caller [broadcast_fun: :broadcast_from]", %{cache: cache} do
-      {:ok, stream_pid} = Streams.start_link(cache: Cache, broadcast_fun: :broadcast_from)
-
       assert cache.subscribe() == :ok
 
       :ok = cache.put("foo", "bar")
@@ -98,15 +168,10 @@ defmodule Nebulex.StreamsTest do
       expected_event = event_fixture()
 
       refute_receive ^expected_event
-
-      safe_stop(stream_pid)
     end
 
     test "ok: subscribes a process [broadcast_fun: :broadcast_from]", %{cache: cache} do
-      {:ok, stream_pid} = Streams.start_link(cache: Cache, broadcast_fun: :broadcast_from)
-
       parent = self()
-
       expected_event = event_fixture()
 
       pid =
@@ -125,48 +190,7 @@ defmodule Nebulex.StreamsTest do
       :ok = cache.put("foo", "bar")
 
       assert_receive {^pid, ^expected_event}, 5000
-
-      safe_stop(stream_pid)
-    end
-
-    test "error: subscribe error", %{cache: cache} do
-      {:ok, stream_pid} = Streams.start_link(cache: Cache)
-
-      Phoenix.PubSub
-      |> expect(:subscribe, fn _, _ -> {:error, :error} end)
-
-      msg =
-        "Nebulex.Streams.subscribe(Nebulex.StreamsTest.Cache, " <>
-          "[events: [:deleted]]) failed with reason: :error"
-
-      assert_raise Nebulex.Error, "#{msg}", fn ->
-        cache.subscribe!(events: [:deleted])
-      end
-
-      safe_stop(stream_pid)
-    end
-
-    test "error: broadcast error", %{cache: cache} do
-      {:ok, stream_pid} = Streams.start_link(cache: Cache)
-
-      Phoenix.PubSub
-      |> expect(:broadcast, fn _, _, _ -> {:error, :error} end)
-
-      with_telemetry_handler([@event], fn ->
-        :ok = cache.subscribe!()
-        :ok = cache.put("foo", "bar")
-
-        assert_receive {@event, %{},
-                        %{
-                          status: :error,
-                          reason: :error,
-                          pubsub: Nebulex.Streams.PubSub,
-                          topic: "Elixir.Nebulex.StreamsTest.Cache:inserted",
-                          event: %CacheEntryEvent{}
-                        }}
-      end)
-
-      safe_stop(stream_pid)
+      refute_receive ^expected_event
     end
   end
 
@@ -298,6 +322,7 @@ defmodule Nebulex.StreamsTest do
   defp event_fixture(opts \\ []) do
     opts
     |> Enum.into(%{
+      pid: Adapter.lookup_meta(opts[:name] || Cache).pid,
       type: :inserted,
       cache: Cache,
       command: :put,

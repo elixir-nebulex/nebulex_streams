@@ -133,21 +133,6 @@ defmodule Nebulex.Streams do
   separate process. This allows the consumer workload to be split among many
   processes and nodes in the cluster.
 
-  ### Partition Strategy
-
-  Choose partition counts based on your workload:
-
-  ```elixir
-  # CPU-bound: Use number of schedulers
-  partitions = System.schedulers_online()
-
-  # I/O-bound: Use higher multiplier
-  partitions = System.schedulers_online() * 2
-
-  # High-throughput: Use even higher counts
-  partitions = System.schedulers_online() * 4
-  ```
-
   ### Example: Partitioned Event Processing
 
   First, create a supervisor to set up the pool of processes:
@@ -374,14 +359,42 @@ defmodule Nebulex.Streams do
 
   """
 
-  import Nebulex.Utils, only: [wrap_error: 2]
-
   alias Nebulex.Event.CacheEntryEvent
   alias Nebulex.Streams.{Options, Server}
   alias Phoenix.PubSub
 
+  import Nebulex.Utils, only: [wrap_error: 2]
+
+  ## Types and constants
+
+  @typedoc """
+  The metadata associated with the stream.
+
+  It is a map with the following keys:
+
+    * `:cache` - The defined cache module.
+    * `:name` - The name of the cache supervisor process.
+    * `:pubsub` - The name of `Phoenix.PubSub` system to use.
+    * `:partitions` - The number of partitions.
+    * `:partition` - The partition to subscribe to.
+
+  """
+  @type metadata() :: %{
+          required(:cache) => atom(),
+          required(:name) => atom(),
+          required(:pubsub) => atom(),
+          required(:partitions) => non_neg_integer() | nil,
+          required(:partition) => non_neg_integer()
+        }
+
   @typedoc "The type used for the function passed to the `:hash` option."
   @type hash() :: (Nebulex.Event.t() -> non_neg_integer() | :none)
+
+  # The registry used to store the stream servers
+  @registry Nebulex.Streams.Registry
+
+  # Inline common instructions
+  @compile {:inline, registry: 0, server_name: 1, topic: 3}
 
   ## Inherited behaviour
 
@@ -429,17 +442,6 @@ defmodule Nebulex.Streams do
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   defdelegate start_link(opts \\ []), to: Server
-
-  @doc """
-  Returns the child specification for the stream.
-  """
-  @spec child_spec(keyword()) :: Supervisor.child_spec()
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]}
-    }
-  end
 
   @doc """
   Subscribes the caller to the cache events topic (a.k.a cache event stream).
@@ -492,7 +494,7 @@ defmodule Nebulex.Streams do
     partition = Keyword.get(opts, :partition)
 
     # Get the stream metadata
-    %{pubsub: pubsub, partitions: partitions} = Server.get_metadata(name)
+    %{pubsub: pubsub, partitions: partitions} = lookup_meta!(name)
 
     # Make the subscriptions
     events
@@ -532,6 +534,57 @@ defmodule Nebulex.Streams do
     end
   end
 
+  ## Internal API
+
+  @doc """
+  Returns the registry used to store the stream servers.
+  """
+  @spec registry() :: atom()
+  def registry, do: @registry
+
+  @doc """
+  Returns the server name.
+  """
+  @spec server_name(atom()) :: {atom(), atom()}
+  def server_name(name), do: {__MODULE__, name}
+
+  @doc """
+  Returns the child specification for the stream.
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]}
+    }
+  end
+
+  @doc """
+  Returns the stream metadata for the given name or `nil` if the stream server
+  is not found.
+  """
+  @spec lookup_meta(any()) :: metadata() | nil
+  def lookup_meta(name) do
+    case Registry.lookup(@registry, server_name(name)) do
+      [{_pid, state}] ->
+        Map.take(state, [:cache, :name, :pubsub, :partitions, :partition])
+
+      [] ->
+        nil
+    end
+  end
+
+  @doc """
+  Same as `lookup_meta/1` but raises an exception if the stream server is not
+  found.
+  """
+  @spec lookup_meta!(any()) :: metadata()
+  def lookup_meta!(name) do
+    name
+    |> lookup_meta()
+    |> Kernel.||(raise "Stream server not found: #{inspect(name)}")
+  end
+
   @doc """
   The event listener function broadcasts the events via `Phoenix.PubSub`.
 
@@ -543,6 +596,7 @@ defmodule Nebulex.Streams do
   @spec broadcast_event(Nebulex.Event.t()) :: :ok | {:error, any()}
   def broadcast_event(
         %CacheEntryEvent{
+          cache: cache,
           name: name,
           type: type,
           metadata: %{
@@ -559,7 +613,7 @@ defmodule Nebulex.Streams do
 
       partition ->
         # Get the topic
-        topic = topic(name, type, partition)
+        topic = topic(name || cache, type, partition)
 
         # Build new event metadata
         metadata = %{
@@ -595,9 +649,6 @@ defmodule Nebulex.Streams do
   end
 
   ## Private functions
-
-  # Inline common instructions
-  @compile {:inline, topic: 3}
 
   # Build the topic name
   defp topic(name, event, nil), do: "#{name}:#{event}"
