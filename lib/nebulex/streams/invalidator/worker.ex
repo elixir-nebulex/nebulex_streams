@@ -132,6 +132,6 @@ defmodule Nebulex.Streams.Invalidator.Worker do
   end
 
   defp handle_error({status, reason}, metadata) when status in [:error, :exit] do
-    {:ok, Map.merge(metadata, %{status: status, reason: reason})}
+    {:ok, Map.merge(metadata, %{status: status, reason: reason, deleted: 0})}
   end
 end

@@ -7,8 +7,9 @@ defmodule Nebulex.Streams.Invalidator.Options do
       type: :atom,
       required: false,
       doc: """
-      The cache module. Required when not using dynamic caches.
+      The Nebulex cache module to watch for invalidation.
 
+      Use this option for static caches defined in your supervision tree.
       This option is mutually exclusive with `:name`.
       """
     ],
@@ -16,10 +17,11 @@ defmodule Nebulex.Streams.Invalidator.Options do
       type: :atom,
       required: false,
       doc: """
-      The name of the dynamic cache instance. Required when using dynamic
-      caches.
+      The instance name of a dynamic cache.
 
-      This option is mutually exclusive with `:cache`.
+      Use this option when you started a dynamic cache with
+      `MyApp.Cache.start_link(name: :my_cache)`. This option is mutually
+      exclusive with `:cache`.
       """
     ],
     event_scope: [
@@ -27,13 +29,22 @@ defmodule Nebulex.Streams.Invalidator.Options do
       required: false,
       default: :remote,
       doc: """
-      The scope of events the invalidator should process.
+      Which cache events to process for invalidation.
 
-      - `:remote` - Only invalidate entries when events come from remote nodes
-      - `:local` - Only invalidate entries when events come from the local node
-      - `:all` - Invalidate entries for both local and remote events
+      Controls whether invalidation happens for events from remote nodes,
+      the local node, or both.
 
-      Defaults to `:remote` to ensure consistency in distributed scenarios.
+        - `:remote` (default) - Only invalidate when events come from remote
+          nodes. Recommended for distributed scenarios to avoid redundant
+          invalidations. Example: Node B invalidates entries when Node A
+          changes them.
+
+        - `:local` - Only invalidate when events come from the local node.
+          Useful for keeping related caches in sync within a single process
+          or node. Example: When PrimaryCache changes, invalidate DerivedCache.
+
+        - `:all` - Invalidate for any event, regardless of origin.
+          Rarely needed; can cause cache thrashing if used unnecessarily.
       """
     ]
   ]

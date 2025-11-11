@@ -1,53 +1,88 @@
 defmodule Nebulex.Streams do
   @moduledoc """
-  Nebulex Streams provides real-time event streaming capabilities for Nebulex
-  caches.
+  Real-time event streaming for Nebulex caches.
+
+  `Nebulex.Streams` enables processes to subscribe to and react to cache entry
+  events as they occur. Built on `Phoenix.PubSub`, it provides a pub/sub
+  infrastructure for monitoring cache operations and coordinating state
+  changes across processes and nodes.
 
   ## Overview
 
-  A Nebulex stream is a named logical channel (topic) where cache entry events
-  are published and consumed. It enables real-time monitoring and reaction to
-  cache operations like insertions, updates, and deletions.
+  When cache operations (put, delete, update, etc.) occur on a Nebulex cache,
+  events are emitted. A Nebulex stream provides a named logical channel where
+  these events are published. Processes can subscribe to the stream to receive
+  events and react to them in real-time.
 
   ### Key Features
 
-  - **Real-time Event Streaming**: React to cache operations as they happen.
-  - **Partitioned Consumption**: Scale event processing across multiple
-    processes.
-  - **Flexible Event Filtering**: Subscribe to specific event types.
-  - **Distributed by Design**: Built on Phoenix.PubSub for cluster-wide event
-    distribution.
+  - **Real-time Events** - React to cache operations as they happen, enabling
+    event-driven architectures.
+  - **Partitioned Streams** - Scale event processing across multiple independent
+    processes for high-volume scenarios.
+  - **Event Filtering** - Subscribe to specific event types (inserted, updated,
+    deleted, expired, evicted) to reduce processing overhead.
+  - **Distributed by Design** - Built on Phoenix.PubSub for seamless
+    cluster-wide event distribution.
+  - **Telemetry Integration** - Comprehensive observability for monitoring
+    streams and debugging.
 
-  ### Core Concepts
+  ## When to Use Streams
 
-  - **Stream**: A named channel for cache events.
-  - **Event**: A cache operation (insert, update, delete, etc.).
-  - **Partition**: A subdivision of a stream for parallel processing.
-  - **Subscriber**: A process that receives events from a stream.
+  Streams are useful when you need to:
+
+  - **React to cache changes**: Invalidate related caches or trigger workflows
+    when data changes.
+  - **Monitor cache activity**: Track cache hit rates, event volumes, or
+    performance.
+  - **Keep data in sync**: Ensure consistency across multiple cache instances or
+    systems-of-record in distributed scenarios.
+  - **Implement cache-through patterns**: Propagate cache updates to databases
+    or other systems..
+  - **Build event-driven features**: React to data mutations for notifications,
+    analytics, or state updates.
+
+  ## Core Concepts
+
+  - **Stream**: A named, logical channel for events from a specific cache.
+  - **Event**: A representation of a cache operation (insert, update, delete,
+    expire, evict).
+  - **Topic**: An internal PubSub topic routing events to subscribers.
+  - **Partition**: A subdivision of the stream for parallel, concurrent
+    processing.
+  - **Subscriber**: A process that receives and handles events from a stream.
 
   ## Event Types
 
-  Cache entry events include:
+  Cache entry events (`Nebulex.Event.CacheEntryEvent`) represent different
+  operations on cache entries:
 
-  - `:inserted` - New cache entry created.
-  - `:updated` - Existing cache entry modified.
-  - `:deleted` - Cache entry removed.
-  - `:expired` - Cache entry expired (if supported by adapter).
-  - `:evicted` - Cache entry evicted due to size limits.
+  - `:inserted` - A new cache entry was created (e.g., first `put`).
+  - `:updated` - An existing cache entry was modified
+    (e.g., `put` overwrites value).
+  - `:deleted` - A cache entry was explicitly removed (e.g., `delete`).
+  - `:expired` - A cache entry reached its TTL (if supported by adapter).
+  - `:evicted` - A cache entry was removed due to capacity limits or eviction
+    policy.
 
-  ## Usage
+  ## Getting Started
 
-  First, define a Nebulex cache using `Nebulex.Streams`:
+  ### Step 1: Add Streaming to Your Cache
+
+  Extend your Nebulex cache with streaming capabilities:
 
       defmodule MyApp.Cache do
         use Nebulex.Cache,
-          otp_app: :nebulex_streams,
+          otp_app: :my_app,
           adapter: Nebulex.Adapters.Local
 
         use Nebulex.Streams
       end
 
-  Then, add the cache and the stream to your application's supervision tree:
+  ### Step 2: Start the Stream Server
+
+  Add the stream server to your application's supervision tree. The stream
+  server must be started **after** the cache:
 
       # lib/my_app/application.ex
       def start(_type, _args) do
@@ -56,100 +91,157 @@ defmodule Nebulex.Streams do
           {Nebulex.Streams, cache: MyApp.Cache}
         ]
 
-        Supervisor.start_link(children, strategy: :rest_for_one, name: MyApp.Supervisor)
+        opts = [strategy: :rest_for_one, name: MyApp.Supervisor]
+        Supervisor.start_link(children, opts)
       end
 
-  The stream setup is ready. Now processes can subscribe and listen for cache
-  events. For example, you can use a `GenServer`:
+  ### Step 3: Create an Event Handler
 
-      defmodule MyApp.Cache.EventHandler do
+  Implement a GenServer that subscribes to cache events:
+
+      defmodule MyApp.EventHandler do
         use GenServer
 
-        @doc false
-        def start_link(args) do
-          GenServer.start_link(__MODULE__, args)
+        def start_link(_) do
+          GenServer.start_link(__MODULE__, nil)
         end
 
-        @impl true
-        def init(_args) do
-          # Subscribe the process to the cache topic
+        def init(_) do
+          # Subscribe to all cache events
           :ok = MyApp.Cache.subscribe()
-
           {:ok, nil}
         end
 
-        @impl true
         def handle_info(%Nebulex.Event.CacheEntryEvent{} = event, state) do
-          # Your logic for handling the event
-          IO.inspect(event)
+          # Process the event
+          case event.type do
+            :inserted -> handle_insert(event)
+            :updated -> handle_update(event)
+            :deleted -> handle_delete(event)
+            _ -> :ok
+          end
 
           {:noreply, state}
         end
+
+        defp handle_insert(%{target: {:key, key}}) do
+          IO.puts("Cache insert: \#{key}")
+        end
+
+        defp handle_update(%{target: {:key, key}}) do
+          IO.puts("Cache update: \#{key}")
+        end
+
+        defp handle_delete(%{target: {:key, key}}) do
+          IO.puts("Cache delete: \#{key}")
+        end
       end
 
-  Remember to add the event handler to your application's supervision tree:
+  ### Step 4: Start the Event Handler
 
-      # lib/my_app/application.ex
+  Add your event handler to the supervision tree:
+
       def start(_type, _args) do
         children = [
           MyApp.Cache,
           {Nebulex.Streams, cache: MyApp.Cache},
-          MyApp.Cache.EventHandler
+          MyApp.EventHandler
         ]
 
-        Supervisor.start_link(children, strategy: :rest_for_one, name: MyApp.Supervisor)
+        opts = [strategy: :rest_for_one, name: MyApp.Supervisor]
+        Supervisor.start_link(children, opts)
       end
 
-  All the pieces are in place. You can run cache actions to see how events are handled:
+  ### Step 5: Verify It Works
 
-      iex> MyApp.Cache.put("foo", "bar")
+  Perform cache operations and observe the events:
+
+      iex> MyApp.Cache.put("user:123", %{name: "Alice"})
+      Cache insert: user:123
       :ok
 
-      #=> MyApp.Cache.EventHandler:
-      %Nebulex.Event.CacheEntryEvent{
-        cache: MyApp.Cache,
-        name: MyApp.Cache,
-        type: :inserted,
-        target: {:key, "foo"},
-        command: :put,
-        metadata: %{
-          node: :nonode@nohost,
-          pid: #PID<0.241.0>,
-          partition: nil,
-          partitions: nil,
-          topic: "Elixir.MyApp.Cache:inserted"
-        }
-      }
+      iex> MyApp.Cache.put("user:123", %{name: "Bob"})
+      Cache update: user:123
+      :ok
+
+      iex> MyApp.Cache.delete("user:123")
+      Cache delete: user:123
+      :ok
 
   ## Partitions
 
-  If a stream were constrained to be consumed by a single process only, that
-  would place a significant limit on the system's scalability. While it could
-  manage many streams across many machines (Phoenix.PubSub is distributed),
-  a single topic could not handle too many events. Fortunately,
-  `Nebulex.Streams` provides partitioning capabilities.
+  By default, all cache events go to a single topic and all subscribers receive
+  all events. This works fine for low event volumes, but becomes a bottleneck
+  under high load.
 
-  Partitioning breaks a single topic into multiple ones, each consumed by a
-  separate process. This allows the consumer workload to be split among many
-  processes and nodes in the cluster.
+  Partitions divide the event stream into multiple independent sub-streams,
+  each with its own topic. This allows:
+
+  - **Parallel Processing** - Multiple processes (one per partition) process
+    events concurrently.
+  - **Scalability** - Handle higher event volumes without overwhelming a single
+    process.
+  - **Load Balancing** - Distribute event handling across CPU cores or cluster
+    nodes.
+  - **Ordering Guarantees** - Events within a partition maintain order; events
+    to different partitions can be processed concurrently.
+
+  ### How Partitions Work
+
+  1. When a cache event occurs, a **hash function** determines which partition
+    it belongs to.
+  2. The event is published to that partition's topic.
+  3. Subscribers can choose to subscribe to specific partitions or all
+    partitions.
+  4. Each partition can have independent subscriber(s) processing events in
+    parallel.
+
+  ### When to Use Partitions
+
+  - **Want parallelism** - Leverage multiple CPU cores for event processing
+    (e.g., high event volume).
+  - **CPU-bound processing** - Event handlers do significant computation.
+  - **I/O-bound processing** - Event handlers call external services or
+    databases.
 
   ### Example: Partitioned Event Processing
 
-  First, create a supervisor to set up the pool of processes:
+  To use partitions, you need to:
 
-      defmodule MyApp.Cache.EventHandler.Supervisor do
+  1. Configure the stream with a partition count.
+  2. Create a pool of event handler processes (one per partition).
+  3. Have each handler subscribe to its specific partition.
+
+  **Step 1: Configure stream with partitions**
+
+      def start(_type, _args) do
+        # Use one partition per CPU core
+        partitions = System.schedulers_online()
+
+        children = [
+          MyApp.Cache,
+          {Nebulex.Streams, cache: MyApp.Cache, partitions: partitions},
+          {MyApp.EventHandler.Pool, partitions}
+        ]
+
+        Supervisor.start_link(children, strategy: :rest_for_one)
+      end
+
+  **Step 2: Create a pool supervisor for event handlers**
+
+      defmodule MyApp.EventHandler.Pool do
         use Supervisor
 
         def start_link(partitions) do
           Supervisor.start_link(__MODULE__, partitions, name: __MODULE__)
         end
 
-        @impl true
         def init(partitions) do
           children =
-            for p <- 0..(partitions - 1) do
-              Supervisor.child_spec({MyApp.Cache.EventHandler, p},
-                id: {MyApp.Cache.EventHandler, p}
+            for partition <- 0..(partitions - 1) do
+              Supervisor.child_spec(
+                {MyApp.EventHandler, partition},
+                id: {MyApp.EventHandler, partition}
               )
             end
 
@@ -157,205 +249,261 @@ defmodule Nebulex.Streams do
         end
       end
 
-  Then, modify the event handler to subscribe to a specific partition:
+  **Step 3: Create partition-aware event handler**
 
-      defmodule MyApp.Cache.EventHandler do
+      defmodule MyApp.EventHandler do
         use GenServer
 
-        @doc false
         def start_link(partition) do
           GenServer.start_link(__MODULE__, partition)
         end
 
-        @impl true
         def init(partition) do
-          # Subscribe the process to the cache topic partition
+          # Subscribe to events for this specific partition only
           :ok = MyApp.Cache.subscribe(partition: partition)
 
-          {:ok, %{partition: partition}}
+          {:ok, %{partition: partition, count: 0}}
         end
 
-        @impl true
         def handle_info(%Nebulex.Event.CacheEntryEvent{} = event, state) do
-          # Your logic for handling the event
-          IO.inspect(event)
+          # Each handler processes its partition independently
+          handle_event(event, state)
 
-          {:noreply, state}
+          {:noreply, %{state | count: state.count + 1}}
         end
+
+        defp handle_event(%{type: :inserted, target: {:key, key}}, state) do
+          IO.puts("Partition \#{state.partition}: inserted \#{key}")
+        end
+
+        defp handle_event(%{type: :deleted, target: {:key, key}}, state) do
+          IO.puts("Partition \#{state.partition}: deleted \#{key}")
+        end
+
+        defp handle_event(_, _), do: :ok
       end
 
-  Update the application's supervision tree:
-
-      # lib/my_app/application.ex
-      def start(_type, _args) do
-        partitions = System.schedulers_online()
-
-        children = [
-          MyApp.Cache,
-          {Nebulex.Streams, cache: MyApp.Cache, partitions: partitions},
-          {MyApp.Cache.EventHandler.Supervisor, partitions}
-        ]
-
-        Supervisor.start_link(children, strategy: :rest_for_one, name: MyApp.Supervisor)
-      end
-
-  Try running a cache action again:
+  **Step 4: Observe partitioned event distribution**
 
       iex> MyApp.Cache.put("foo", "bar")
+      Partition 2: inserted foo
       :ok
 
-      #=> MyApp.Cache.EventHandler:
+      iex> MyApp.Cache.put("baz", "qux")
+      Partition 5: inserted baz
+      :ok
+
+  Note that different cache keys are routed to different partitions. The
+  partition number in the event metadata shows which partition processed
+  the event:
+
       %Nebulex.Event.CacheEntryEvent{
-        cache: MyApp.Cache,
-        name: MyApp.Cache,
-        type: :inserted,
-        target: {:key, "foo"},
-        command: :put,
+        ...
         metadata: %{
-          node: :nonode@nohost,
-          pid: #PID<0.248.0>,
-          partition: 4,
-          partitions: 12,
-          topic: "Elixir.MyApp.Cache:4:inserted"
+          partition: 2,        # This event went to partition 2
+          partitions: 8,       # Out of 8 total partitions
+          topic: "Elixir.MyApp.Cache:2:inserted"
         }
       }
 
   ## Advanced Usage Patterns
 
-  ### Event Filtering and Processing
+  ### Event Filtering by Type
 
-  ```elixir
-  defmodule MyApp.EventProcessor do
-    use GenServer
+  Subscribe only to the events you care about to reduce message overhead:
 
-    def init(_) do
-      # Subscribe to specific events only
-      :ok = MyApp.Cache.subscribe(events: [:inserted, :updated])
-      {:ok, %{}}
-    end
+      defmodule MyApp.DeleteTracker do
+        use GenServer
 
-    def handle_info(%CacheEntryEvent{type: :inserted, target: {:key, key}}, state) do
-      # Handle new entries
-      Logger.info("New cache entry: \#{key}")
-      {:noreply, state}
-    end
+        def init(_) do
+          # Only subscribe to deletion events, ignore everything else
+          :ok = MyApp.Cache.subscribe(events: [:deleted])
+          {:ok, %{deleted_count: 0}}
+        end
 
-    def handle_info(%CacheEntryEvent{type: :updated, target: {:key, key}}, state) do
-      # Handle updates
-      Logger.info("Updated cache entry: \#{key}")
-      {:noreply, state}
-    end
-  end
-  ```
-
-  ### Custom Hash Functions
-
-      # Route events based on key patterns
-      def custom_hash(%CacheEntryEvent{target: {:key, key}}) do
-        case String.starts_with?(key, "user:") do
-          true -> 0   # User events to partition 0
-          false -> 1  # Other events to partition 1
+        def handle_info(%Nebulex.Event.CacheEntryEvent{type: :deleted, target: {:key, key}}, state) do
+          IO.puts("Entry deleted: \#{key}")
+          {:noreply, %{state | deleted_count: state.deleted_count + 1}}
         end
       end
 
-      {Nebulex.Streams, cache: MyCache, partitions: 2, hash: &MyApp.custom_hash/1}
+  ### Custom Hash Functions for Domain Routing
 
-  ## Adapter-specific telemetry events
+  Use custom hash functions to route events to partitions based on business
+  logic:
 
-  This adapter exposes following Telemetry events:
+      defmodule MyApp.DomainAwareHash do
+        def hash(%Nebulex.Event.CacheEntryEvent{target: {:key, key}}) do
+          cond do
+            String.starts_with?(key, "user:") -> 0     # User events -> partition 0
+            String.starts_with?(key, "session:") -> 1  # Session events -> partition 1
+            String.starts_with?(key, "temp:") -> :none # Discard temporary entries
+            true -> 2                                  # Everything else -> partition 2
+          end
+        end
+      end
 
-    * `[nebulex, :streams, :listener_registered]` - Dispatched by the
-      adapter when the stream listener is registered.
+      # Configure the stream with custom hash
+      {Nebulex.Streams,
+       cache: MyApp.Cache,
+       partitions: 3,
+       hash: &MyApp.DomainAwareHash.hash/1}
 
-      * Measurements: `%{}`
-      * Metadata:
+  ### Synchronizing Related Caches
 
-        ```
-        %{
-          cache: atom(),
-          name: atom(),
-          pubsub: atom(),
-          partitions: non_neg_integer() | nil
-        }
-        ```
+  Invalidate dependent caches when primary cache changes:
 
-    * `[nebulex, :streams, :listener_unregistered]` - Dispatched by the
-      adapter when the stream listener is unregistered.
+      defmodule MyApp.CacheSynchronizer do
+        use GenServer
 
-      * Measurements: `%{}`
-      * Metadata:
+        def start_link(primary_cache) do
+          GenServer.start_link(__MODULE__, primary_cache)
+        end
 
-        ```
-        %{
-          cache: atom(),
-          name: atom(),
-          pubsub: atom(),
-          partitions: non_neg_integer() | nil
-        }
-        ```
+        def init(primary_cache) do
+          :ok = primary_cache.subscribe()
+          {:ok, %{primary_cache: primary_cache}}
+        end
 
-    * `[nebulex, :streams, :broadcast]` - Dispatched by the
-      adapter when a cache event is broadcast.
+        def handle_info(%Nebulex.Event.CacheEntryEvent{} = event, state) do
+          # When primary cache updates, invalidate dependent caches
+          case event do
+            %{type: :deleted, target: {:key, key}} ->
+              # Clean up derived data in other caches
+              MyApp.DerivedCache.delete(key)
+              MyApp.AggregateCache.delete(key)
 
-      * Measurements: `%{}`
-      * Metadata:
+            %{type: :updated, target: {:key, key}} ->
+              # Invalidate caches that depend on this key
+              MyApp.DerivedCache.delete(key)
 
-        ```
-        %{
-          status: :ok | :error,
-          reason: any(),
-          pubsub: atom(),
-          topic: String.t(),
-          event: Nebulex.Event.t()
-        }
-        ```
+            _ ->
+              :ok
+          end
 
-  ## Troubleshooting
+          {:noreply, state}
+        end
+      end
 
-  ### Common Issues
+  ### Batch Processing Events
 
-  **Events not received**
-  - Ensure the stream server is started before subscribing
-  - Check that the cache is configured correctly
-  - Verify Phoenix.PubSub is running
+  Collect events and process them in batches for efficiency:
 
-  **High memory usage**
-  - Reduce number of partitions
-  - Implement event filtering to reduce message volume
-  - Monitor process mailbox sizes
+      defmodule MyApp.BatchEventProcessor do
+        use GenServer
 
-  **Performance issues**
-  - Increase partition count for CPU-bound processing
-  - Use `:broadcast_from` to avoid self-messages
-  - Implement batching in event handlers
+        def start_link(_) do
+          GenServer.start_link(__MODULE__, nil)
+        end
 
-  ### Debugging
+        def init(_) do
+          :ok = MyApp.Cache.subscribe()
+          # Process batches every 1 second
+          Process.send_interval(self(), :flush_batch, 1_000)
+          {:ok, %{batch: []}}
+        end
 
-  Enable logging to see stream activity:
+        def handle_info(%Nebulex.Event.CacheEntryEvent{} = event, state) do
+          {:noreply, %{state | batch: [event | state.batch]}}
+        end
 
-      config :logger, level: :debug
+        def handle_info(:flush_batch, %{batch: []} = state) do
+          {:noreply, state}
+        end
 
-      # Add telemetry handler for logging stream events
+        def handle_info(:flush_batch, %{batch: batch} = state) do
+          # Process accumulated events at once
+          process_batch(Enum.reverse(batch))
+          {:noreply, %{state | batch: []}}
+        end
+
+        defp process_batch(events) do
+          # More efficient than processing one by one
+          IO.inspect("Processing batch of \#{length(events)} events")
+        end
+      end
+
+  ## Configuration
+
+  See `start_link/1` for available options.
+
+  ## Telemetry Events
+
+  `Nebulex.Streams` emits telemetry events for observability and monitoring:
+
+  ### Listener Lifecycle Events
+
+  **`[:nebulex, :streams, :listener_registered]`** - Fired when a stream
+  listener is registered. Metadata includes:
+
+    * `:cache` - The cache module.
+    * `:name` - Cache instance name.
+    * `:pubsub` - PubSub instance name.
+    * `:partitions` - Number of partitions (nil if not partitioned).
+
+  **`[:nebulex, :streams, :listener_unregistered]`** - Fired when a stream
+  listener stops. Same metadata as `listener_registered`.
+
+  ### Event Broadcast Events
+
+  **`[:nebulex, :streams, :broadcast]`** - Fired when a cache event is broadcast
+  to subscribers. Metadata includes:
+
+    * `:status` - `:ok` or `:error`.
+    * `:reason` - Error reason (nil on success).
+    * `:pubsub` - PubSub instance name.
+    * `:topic` - The internal topic name.
+    * `:event` - The `CacheEntryEvent` that was broadcast.
+
+  ## Best Practices
+
+  ### 1. Use the Right Partition Count
+
+      # Low volume, simple processing: no partitions needed
+      {Nebulex.Streams, cache: MyApp.Cache}
+
+      # Normal volume: use CPU core count
+      partitions = System.schedulers_online()
+      {Nebulex.Streams, cache: MyApp.Cache, partitions: partitions}
+
+      # Very high volume or I/O-bound: use more than cores
+      {Nebulex.Streams, cache: MyApp.Cache, partitions: System.schedulers_online() * 2}
+
+  ### 2. Filter Events You Care About
+
+      # ✓ Good: only subscribe to events you need
+      :ok = MyApp.Cache.subscribe(events: [:deleted])
+
+      # ✗ Avoid: subscribing to all events if you only handle some
+      :ok = MyApp.Cache.subscribe()
+
+  ### 3. Handle Errors Gracefully
+
+      def handle_info(%Nebulex.Event.CacheEntryEvent{} = event, state) do
+        case process_event(event) do
+          :ok ->
+          {:noreply, state}
+
+          {:error, reason} ->
+            Logger.error("Failed to process event: \#{inspect(reason)}")
+            {:noreply, state}
+        end
+      end
+
+  ### 4. Monitor via Telemetry
+
+  Track stream health and performance:
+
       :telemetry.attach_many(
-        "logging-stream-events",
+        "stream-monitoring",
         [
-          [:nebulex, :streams, :broadcast],
           [:nebulex, :streams, :listener_registered],
-          [:nebulex, :streams, :listener_unregistered]
+          [:nebulex, :streams, :listener_unregistered],
+          [:nebulex, :streams, :broadcast]
         ],
-        &MyApp.TelemetryHandler.handle_event/4,
+        &MyApp.StreamTelemetry.handle/4,
         nil
       )
-
-  The handler module should look like this:
-
-      defmodule MyApp.TelemetryHandler do
-        require Logger
-
-        def handle_event(event, _measurements, metadata, _config) do
-          Logger.info("Event \#{Enum.join(event, ".")}: \#{inspect(metadata)}")
-        end
-      end
 
   """
 
@@ -370,14 +518,16 @@ defmodule Nebulex.Streams do
   @typedoc """
   The metadata associated with the stream.
 
-  It is a map with the following keys:
+  A map containing runtime information about the stream configuration:
 
     * `:cache` - The defined cache module.
-    * `:name` - The name of the cache supervisor process.
-    * `:pubsub` - The name of `Phoenix.PubSub` system to use.
-    * `:partitions` - The number of partitions.
-    * `:partition` - The partition to subscribe to.
+    * `:name` - The name of the cache supervisor process (same as cache if not
+      dynamic).
+    * `:pubsub` - The name of `Phoenix.PubSub` system being used.
+    * `:partitions` - The number of partitions (nil if not partitioned).
+    * `:partition` - The specific partition for subscription.
 
+  This metadata is useful for debugging and understanding stream configuration.
   """
   @type metadata() :: %{
           required(:cache) => atom(),
@@ -387,7 +537,17 @@ defmodule Nebulex.Streams do
           required(:partition) => non_neg_integer()
         }
 
-  @typedoc "The type used for the function passed to the `:hash` option."
+  @typedoc """
+  A hash function for custom partition routing.
+
+  Receives a cache event and returns:
+
+    * A partition number (`0..(partitions-1)`) - routes the event to that
+      partition.
+    * `:none` - discards the event completely
+
+  The hash function is only invoked when the `:partitions` option is configured.
+  """
   @type hash() :: (Nebulex.Event.t() -> non_neg_integer() | :none)
 
   # The registry used to store the stream servers
@@ -401,25 +561,10 @@ defmodule Nebulex.Streams do
   @doc false
   defmacro __using__(_opts) do
     quote do
-      @doc """
-      Subscribes the calling process to cache events.
-
-      This is a convenience function that calls `Nebulex.Streams.subscribe/2`
-      with the module name.
-
-      ## Examples
-
-          iex> MyCache.subscribe()
-          :ok
-
-          iex> MyCache.subscribe(events: [:inserted, :deleted])
-          :ok
-      """
+      @doc false
       def subscribe(opts \\ []), do: subscribe(__MODULE__, opts)
 
-      @doc """
-      Same as `subscribe/1` but raises an exception if an error occurs.
-      """
+      @doc false
       def subscribe!(opts \\ []), do: subscribe!(__MODULE__, opts)
 
       @doc false
@@ -433,18 +578,47 @@ defmodule Nebulex.Streams do
   ## API
 
   @doc """
-  Starts a stream server.
+  Starts a stream server for a cache.
+
+  This function starts a stream server that registers itself as an event
+  listener with the cache. The server then broadcasts cache events to
+  subscribed processes via `Phoenix.PubSub`.
+
+  The stream server is typically started as part of your application's
+  supervision tree.
 
   ## Options
 
   #{Options.start_options_docs()}
+
+  ## Examples
+
+  Start a simple stream without partitions:
+
+      {Nebulex.Streams, cache: MyApp.Cache}
+
+  Start a stream with 4 partitions for parallel processing:
+
+      {Nebulex.Streams, cache: MyApp.Cache, partitions: 4}
+
+  Start a stream with a custom hash function:
+
+      {Nebulex.Streams, cache: MyApp.Cache, partitions: 2, hash: &MyApp.custom_hash/1}
+
+  Use a custom PubSub instance:
+
+      {Nebulex.Streams, cache: MyApp.Cache, pubsub: MyApp.CustomPubSub}
 
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   defdelegate start_link(opts \\ []), to: Server
 
   @doc """
-  Subscribes the caller to the cache events topic (a.k.a cache event stream).
+  Subscribes the calling process to cache entry events.
+
+  This function subscribes the current process to events from a Nebulex stream.
+  The process will receive `Nebulex.Event.CacheEntryEvent` messages in its
+  mailbox.
 
   ## Options
 
@@ -452,31 +626,27 @@ defmodule Nebulex.Streams do
 
   ## Examples
 
-  Although you can directly use `Nebulex.Streams.subscribe/2`, like this:
-
-      iex> Nebulex.Streams.subscribe(MyApp.Cache)
-      :ok
-      iex> Nebulex.Streams.subscribe(MyApp.Cache, events: [:inserted, :deleted])
-      :ok
-      iex> Nebulex.Streams.subscribe(:my_cache, partition: 0)
-      :ok
-
-  It is recommended you do it from the cache itself:
+  The recommended approach is to subscribe from the cache module itself:
 
       iex> MyApp.Cache.subscribe()
       :ok
 
-  You can subscribe to specific events types:
+  You can also use `Nebulex.Streams.subscribe/2` directly with the cache name:
+
+      iex> Nebulex.Streams.subscribe(MyApp.Cache)
+      :ok
+
+  Subscribe to specific event types only:
 
       iex> MyApp.Cache.subscribe(events: [:inserted, :deleted])
       :ok
 
-  In case you have partitions, you should use the option `:partition`:
+  When using partitioned streams, subscribe to a specific partition:
 
       iex> MyApp.Cache.subscribe(partition: 0)
       :ok
 
-  When using dynamic caches:
+  With dynamic caches, pass the cache instance name:
 
       iex> MyApp.Cache.subscribe(:my_cache)
       :ok
@@ -526,6 +696,15 @@ defmodule Nebulex.Streams do
 
   @doc """
   Same as `subscribe/2` but raises an exception if an error occurs.
+
+  ## Examples
+
+      iex> MyApp.Cache.subscribe!()
+      :ok
+
+      iex> MyApp.Cache.subscribe!(partition: 0)
+      :ok
+
   """
   @spec subscribe!(cache_name :: atom(), opts :: keyword()) :: :ok
   def subscribe!(name, opts \\ []) do
@@ -560,8 +739,24 @@ defmodule Nebulex.Streams do
   end
 
   @doc """
-  Returns the stream metadata for the given name or `nil` if the stream server
-  is not found.
+  Returns the stream metadata for the given cache name.
+
+  This function retrieves runtime configuration details about a stream server.
+
+  ## Examples
+
+      iex> Nebulex.Streams.lookup_meta(MyApp.Cache)
+      %{
+        cache: MyApp.Cache,
+        name: MyApp.Cache,
+        pubsub: Nebulex.Streams.PubSub,
+        partitions: 4,
+        partition: nil
+      }
+
+      iex> Nebulex.Streams.lookup_meta(:not_started)
+      nil
+
   """
   @spec lookup_meta(any()) :: metadata() | nil
   def lookup_meta(name) do
@@ -577,6 +772,15 @@ defmodule Nebulex.Streams do
   @doc """
   Same as `lookup_meta/1` but raises an exception if the stream server is not
   found.
+
+  ## Examples
+
+      iex> Nebulex.Streams.lookup_meta!(MyApp.Cache)
+      %{...}
+
+      iex> Nebulex.Streams.lookup_meta!(:not_started)
+      ** (RuntimeError) Stream server not found: :not_started
+
   """
   @spec lookup_meta!(any()) :: metadata()
   def lookup_meta!(name) do
@@ -586,12 +790,16 @@ defmodule Nebulex.Streams do
   end
 
   @doc """
-  The event listener function broadcasts the events via `Phoenix.PubSub`.
+  Broadcasts a cache event to all interested subscribers via Phoenix.PubSub.
 
-  > #### `broadcast_event/1` {: .info}
+  This is the internal callback function registered with the cache as an event
+  listener. It is called automatically whenever a cache operation (put, delete,
+  etc.) occurs.
+
+  > #### Internal Use {: .warning}
   >
-  > This function is used internally by the stream server to broadcast the
-  > events via `Phoenix.PubSub`.
+  > This function is for internal use by Nebulex.Streams and the cache event
+  > listener system. Do not call this directly in application code.
   """
   @spec broadcast_event(Nebulex.Event.t()) :: :ok | {:error, any()}
   def broadcast_event(
@@ -630,7 +838,7 @@ defmodule Nebulex.Streams do
   end
 
   @doc """
-  The default hash function is used when the `:partitions` option is configured.
+  The default hash function for partitioning events.
   """
   @spec default_hash(Nebulex.Event.t()) :: non_neg_integer()
   def default_hash(%CacheEntryEvent{metadata: %{partitions: partitions}} = event) do

@@ -1,4 +1,4 @@
-# 🌩 Nebulex Streams
+# Nebulex Streams 🌩
 > Real-time event streaming for Nebulex caches
 
 ![CI](https://github.com/elixir-nebulex/nebulex_streams/workflows/CI/badge.svg)
@@ -18,6 +18,8 @@ applications and real-time monitoring.
 - 🎯 **Event Filtering** - Subscribe to specific event types.
 - 🌐 **Distributed** - Built on Phoenix.PubSub for cluster-wide events.
 - 📊 **Telemetry** - Comprehensive observability with telemetry events.
+- 🔄 **Built-in Invalidation** - Automatic cache invalidation for distributed
+  consistency.
 
 ## Installation
 
@@ -30,6 +32,9 @@ def deps do
   ]
 end
 ```
+
+See the [online documentation](https://hexdocs.pm/nebulex_streams)
+for more information.
 
 ## Quick Start
 
@@ -286,6 +291,27 @@ Nebulex Streams supports dynamic caches:
 # Subscribe to the dynamic cache
 MyApp.Cache.subscribe(:my_dynamic_cache, [])
 ```
+
+## Automatic Cache Invalidation
+
+For distributed cache scenarios, Nebulex Streams includes a built-in
+[`Nebulex.Streams.Invalidator`](https://hexdocs.pm/nebulex_streams/Nebulex.Streams.Invalidator.html)
+that automatically removes stale entries when they change on other nodes. This
+implements a "fail-safe" approach to cache consistency.
+
+```elixir
+# Add to your supervision tree after the stream
+children = [
+  MyApp.Cache,
+  {Nebulex.Streams, cache: MyApp.Cache},
+  {Nebulex.Streams.Invalidator, cache: MyApp.Cache}  # Watch for changes
+]
+
+Supervisor.start_link(children, strategy: :rest_for_one)
+```
+
+For detailed options and patterns, see the
+[Invalidator documentation](https://hexdocs.pm/nebulex_streams/Nebulex.Streams.Invalidator.html).
 
 ## Contributing
 
