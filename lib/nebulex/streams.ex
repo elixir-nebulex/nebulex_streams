@@ -37,8 +37,8 @@ defmodule Nebulex.Streams do
     performance.
   - **Keep data in sync**: Ensure consistency across multiple cache instances or
     systems-of-record in distributed scenarios.
-  - **Implement cache-through patterns**: Propagate cache updates to databases
-    or other systems..
+  - **Implement cache invalidation patterns**: Propagate cache updates to
+    databases or other systems.
   - **Build event-driven features**: React to data mutations for notifications,
     analytics, or state updates.
 
@@ -482,7 +482,7 @@ defmodule Nebulex.Streams do
       def handle_info(%Nebulex.Event.CacheEntryEvent{} = event, state) do
         case process_event(event) do
           :ok ->
-          {:noreply, state}
+            {:noreply, state}
 
           {:error, reason} ->
             Logger.error("Failed to process event: \#{inspect(reason)}")
@@ -614,6 +614,17 @@ defmodule Nebulex.Streams do
   defdelegate start_link(opts \\ []), to: Server
 
   @doc """
+  Returns the child specification for the stream.
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]}
+    }
+  end
+
+  @doc """
   Subscribes the calling process to cache entry events.
 
   This function subscribes the current process to events from a Nebulex stream.
@@ -726,17 +737,6 @@ defmodule Nebulex.Streams do
   """
   @spec server_name(atom()) :: {atom(), atom()}
   def server_name(name), do: {__MODULE__, name}
-
-  @doc """
-  Returns the child specification for the stream.
-  """
-  @spec child_spec(keyword()) :: Supervisor.child_spec()
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]}
-    }
-  end
 
   @doc """
   Returns the stream metadata for the given cache name.

@@ -50,14 +50,11 @@ defmodule Nebulex.Streams.Server do
       opts: opts
     }
 
-    case Registry.register(Streams.registry(), Streams.server_name(name || cache), state) do
-      {:ok, _} ->
-        :ok = register_listener(state)
+    with {:ok, _} <-
+           Registry.register(Streams.registry(), Streams.server_name(name || cache), state) do
+      :ok = register_listener(state)
 
-        {:ok, state, {:continue, :registered}}
-
-      {:error, reason} ->
-        raise "Failed to register stream server: #{inspect(reason)}"
+      {:ok, state, {:continue, :registered}}
     end
   end
 

@@ -56,7 +56,7 @@ defmodule Nebulex.Streams.MixProject do
 
   defp deps do
     [
-      {:nebulex, github: "elixir-nebulex/nebulex", branch: "main", override: true},
+      {:nebulex, "~> 3.0.0-rc.2"},
       {:nimble_options, "~> 0.5 or ~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:telemetry, "~> 0.4 or ~> 1.0"},
@@ -66,16 +66,15 @@ defmodule Nebulex.Streams.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},
-      {:mimic, "~> 1.11", only: :test},
-      {:flame, "~> 0.5", only: :test},
-      {:nebulex_local, github: "elixir-nebulex/nebulex_local", branch: "main", only: :test},
+      {:mimic, "~> 2.2", only: :test},
+      {:nebulex_local, "~> 3.0.0-rc.2", only: :test},
 
       # Benchmark Test
-      {:benchee, "~> 1.3", only: [:dev, :test]},
+      {:benchee, "~> 1.5", only: [:dev, :test]},
       {:benchee_html, "~> 1.0", only: [:dev, :test]},
 
       # Docs
-      {:ex_doc, "~> 0.37", only: [:dev, :test], runtime: false}
+      {:ex_doc, "~> 0.39", only: [:dev, :test], runtime: false}
     ]
   end
 

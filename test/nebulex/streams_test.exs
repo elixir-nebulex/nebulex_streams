@@ -40,8 +40,7 @@ defmodule Nebulex.StreamsTest do
       {:ok, cache_pid} = Cache.start_link()
       {:ok, stream_pid} = Streams.start_link(cache: Cache)
 
-      assert {:error, {e, _}} = Streams.start_link(cache: Cache)
-      assert Exception.message(e) =~ "Failed to register stream server: {:already_registered"
+      assert {:error, {:already_registered, _}} = Streams.start_link(cache: Cache)
 
       safe_stop(stream_pid)
       safe_stop(cache_pid)

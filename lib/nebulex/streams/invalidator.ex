@@ -271,8 +271,6 @@ defmodule Nebulex.Streams.Invalidator do
   alias Nebulex.Streams
   alias Nebulex.Streams.Invalidator.{Options, Worker}
 
-  import Nebulex.Utils, only: [camelize_and_concat: 1]
-
   ## API
 
   @doc """
@@ -320,14 +318,13 @@ defmodule Nebulex.Streams.Invalidator do
     opts = Options.validate!(opts)
     name = get_cache_name(opts)
     event_scope = Keyword.fetch!(opts, :event_scope)
-    sup_name = camelize_and_concat([name, Invalidator])
 
     metadata =
       name
       |> Streams.lookup_meta!()
       |> Map.merge(%{name: name, event_scope: event_scope})
 
-    Supervisor.start_link(__MODULE__, metadata, name: sup_name)
+    Supervisor.start_link(__MODULE__, metadata)
   end
 
   ## Supervisor callback

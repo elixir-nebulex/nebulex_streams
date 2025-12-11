@@ -28,7 +28,7 @@ Add `nebulex_streams` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:nebulex_streams, "~> 0.1.0"}
+    {:nebulex_streams, "~> 0.1"}
   ]
 end
 ```
@@ -333,4 +333,4 @@ all checks run successfully.
 
 Copyright (c) 2025, Carlos Bolaños.
 
-`Nebulex.Streams` source code is licensed under the [MIT License](LICENSE).
+`Nebulex.Streams` source code is licensed under the [MIT License](LICENSE.md).
