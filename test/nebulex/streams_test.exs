@@ -56,17 +56,23 @@ defmodule Nebulex.StreamsTest do
     end
   end
 
-  describe "lookup_meta!/1" do
+  describe "lookup!/1" do
     test "ok: returns metadata" do
       {:ok, cache_pid} = Cache.start_link()
       {:ok, stream_pid} = Streams.start_link(cache: Cache)
 
-      assert Streams.lookup_meta!(Cache) == %{
+      assert %Streams{
                cache: Cache,
                name: nil,
                pubsub: Nebulex.Streams.PubSub,
-               partitions: nil
-             }
+               partitions: nil,
+               hash: hash,
+               broadcast_fun: :broadcast,
+               opts: opts
+             } = Streams.lookup!(Cache)
+
+      assert is_function(hash, 1)
+      assert is_list(opts)
 
       safe_stop(stream_pid)
       safe_stop(cache_pid)
@@ -74,7 +80,7 @@ defmodule Nebulex.StreamsTest do
 
     test "error: not found" do
       assert_raise RuntimeError, ~r"stream server not found: #{inspect(Cache)}", fn ->
-        Streams.lookup_meta!(Cache)
+        Streams.lookup!(Cache)
       end
     end
   end

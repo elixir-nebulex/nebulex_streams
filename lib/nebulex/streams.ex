@@ -516,28 +516,6 @@ defmodule Nebulex.Streams do
   ## Types and constants
 
   @typedoc """
-  The metadata associated with the stream.
-
-  A map containing runtime information about the stream configuration:
-
-    * `:cache` - The defined cache module.
-    * `:name` - The name of the cache supervisor process (same as cache if not
-      dynamic).
-    * `:pubsub` - The name of `Phoenix.PubSub` system being used.
-    * `:partitions` - The number of partitions (nil if not partitioned).
-    * `:partition` - The specific partition for subscription.
-
-  This metadata is useful for debugging and understanding stream configuration.
-  """
-  @type metadata() :: %{
-          required(:cache) => atom(),
-          required(:name) => atom(),
-          required(:pubsub) => atom(),
-          required(:partitions) => non_neg_integer() | nil,
-          required(:partition) => non_neg_integer()
-        }
-
-  @typedoc """
   A hash function for custom partition routing.
 
   Receives a cache event and returns:
@@ -550,11 +528,55 @@ defmodule Nebulex.Streams do
   """
   @type hash() :: (Nebulex.Event.t() -> non_neg_integer() | :none)
 
+  @typedoc """
+  The broadcast function type.
+
+  Determines how events are broadcast to subscribers:
+
+    * `:broadcast` - Sends the event to all subscribers, including the
+      broadcasting process.
+    * `:broadcast_from` - Sends the event to all subscribers except the
+      broadcasting process.
+
+  """
+  @type broadcast_fun() :: :broadcast | :broadcast_from
+
+  @typedoc """
+  The stream metadata struct.
+
+  A struct containing runtime information about the stream configuration:
+
+    * `:cache` - The defined cache module.
+    * `:name` - The name of the cache supervisor process (same as cache if not
+      dynamic).
+    * `:pubsub` - The name of `Phoenix.PubSub` system being used.
+    * `:partitions` - The number of partitions (`nil` if not partitioned).
+    * `:hash` - The hash function used for partition routing.
+    * `:broadcast_fun` - The broadcast function (`:broadcast` or
+      `:broadcast_from`).
+    * `:opts` - Additional options (e.g., backoff settings).
+
+  This struct is useful for debugging and understanding stream configuration.
+  """
+  @type t() :: %__MODULE__{
+          cache: atom(),
+          name: atom(),
+          pubsub: atom(),
+          partitions: non_neg_integer() | nil,
+          hash: hash(),
+          broadcast_fun: broadcast_fun(),
+          opts: keyword()
+        }
+
+  # The stream struct
+  @enforce_keys [:cache, :name, :pubsub, :partitions, :hash]
+  defstruct [:cache, :name, :pubsub, :partitions, :hash, broadcast_fun: :broadcast, opts: []]
+
   # The registry used to store the stream servers
   @registry Nebulex.Streams.Registry
 
   # Inline common instructions
-  @compile {:inline, registry: 0, server_name: 1, topic: 3}
+  @compile {:inline, registry: 0, server_name: 1}
 
   ## Inherited behaviour
 
@@ -675,7 +697,7 @@ defmodule Nebulex.Streams do
     partition = Keyword.get(opts, :partition)
 
     # Get the stream metadata
-    %{pubsub: pubsub, partitions: partitions} = lookup_meta!(name)
+    %__MODULE__{pubsub: pubsub, partitions: partitions} = lookup!(name)
 
     # Make the subscriptions
     events
@@ -745,47 +767,45 @@ defmodule Nebulex.Streams do
 
   ## Examples
 
-      iex> Nebulex.Streams.lookup_meta(MyApp.Cache)
-      %{
+      iex> Nebulex.Streams.lookup(MyApp.Cache)
+      %Nebulex.Streams{
         cache: MyApp.Cache,
         name: MyApp.Cache,
         pubsub: Nebulex.Streams.PubSub,
         partitions: 4,
-        partition: nil
+        hash: &Nebulex.Streams.default_hash/1,
+        broadcast_fun: :broadcast,
+        opts: [...]
       }
 
-      iex> Nebulex.Streams.lookup_meta(:not_started)
+      iex> Nebulex.Streams.lookup(:not_started)
       nil
 
   """
-  @spec lookup_meta(any()) :: metadata() | nil
-  def lookup_meta(name) do
+  @spec lookup(any()) :: t() | nil
+  def lookup(name) do
     case Registry.lookup(@registry, server_name(name)) do
-      [{_pid, state}] ->
-        Map.take(state, [:cache, :name, :pubsub, :partitions, :partition])
-
-      [] ->
-        nil
+      [{_pid, %__MODULE__{} = metadata}] -> metadata
+      [] -> nil
     end
   end
 
   @doc """
-  Same as `lookup_meta/1` but raises an exception if the stream server is not
-  found.
+  Same as `lookup/1` but raises an exception if the stream server is not found.
 
   ## Examples
 
-      iex> Nebulex.Streams.lookup_meta!(MyApp.Cache)
-      %{...}
+      iex> Nebulex.Streams.lookup!(MyApp.Cache)
+      %Nebulex.Streams{...}
 
-      iex> Nebulex.Streams.lookup_meta!(:not_started)
+      iex> Nebulex.Streams.lookup!(:not_started)
       ** (RuntimeError) stream server not found: :not_started
 
   """
-  @spec lookup_meta!(any()) :: metadata()
-  def lookup_meta!(name) do
+  @spec lookup!(any()) :: t()
+  def lookup!(name) do
     name
-    |> lookup_meta()
+    |> lookup()
     |> Kernel.||(raise "stream server not found: #{inspect(name)}")
   end
 
@@ -833,7 +853,7 @@ defmodule Nebulex.Streams do
         }
 
         # Broadcast the event
-        do_broadcast(broadcast_fun, pubsub, topic, %{event | metadata: metadata})
+        broadcast(broadcast_fun, pubsub, topic, %{event | metadata: metadata})
     end
   end
 
@@ -894,20 +914,22 @@ defmodule Nebulex.Streams do
             "and < #{inspect(n)} (total number of partitions), got: #{inspect(p)}"
   end
 
-  defp do_broadcast(:broadcast, pubsub, topic, event) do
+  defp broadcast(:broadcast, pubsub, topic, event) do
     pubsub
     |> PubSub.broadcast(topic, event)
     |> handle_broadcast_response(pubsub, topic, event)
   end
 
-  defp do_broadcast(:broadcast_from, pubsub, topic, event) do
+  defp broadcast(:broadcast_from, pubsub, topic, event) do
     pubsub
     |> PubSub.broadcast_from(self(), topic, event)
     |> handle_broadcast_response(pubsub, topic, event)
   end
 
-  defp handle_broadcast_response({:error, reason}, pubsub, topic, event) do
-    dispatch_telemetry_event(:error, reason, pubsub, topic, event)
+  defp handle_broadcast_response({:error, reason} = error, pubsub, topic, event) do
+    :ok = dispatch_telemetry_event(:error, reason, pubsub, topic, event)
+
+    error
   end
 
   defp handle_broadcast_response(:ok, pubsub, topic, event) do

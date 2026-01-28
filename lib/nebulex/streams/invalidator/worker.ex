@@ -104,7 +104,7 @@ defmodule Nebulex.Streams.Invalidator.Worker do
     :telemetry.span(@telemetry_prefix ++ [:invalidate], metadata, fn ->
       try do
         cache
-        |> do_invalidate(name, event.target)
+        |> invalidate_cache(name, event.target)
         |> handle_error(metadata)
       catch
         :exit, reason ->
@@ -113,12 +113,12 @@ defmodule Nebulex.Streams.Invalidator.Worker do
     end)
   end
 
-  defp do_invalidate(cache, name, {:key, key}) do
+  defp invalidate_cache(cache, name, {:key, key}) do
     # Disable telemetry to avoid echoing the event back to the sender
     cache.delete(name, key, telemetry: false)
   end
 
-  defp do_invalidate(cache, name, {:query, query}) do
+  defp invalidate_cache(cache, name, {:query, query}) do
     # Disable telemetry to avoid echoing the event back to the sender
     cache.delete_all(name, [query: query], telemetry: false)
   end

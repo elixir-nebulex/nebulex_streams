@@ -6,15 +6,6 @@ defmodule Nebulex.Streams.Server do
   alias Nebulex.Streams
   alias Nebulex.Streams.Options
 
-  # Internal state
-  defstruct cache: nil,
-            name: nil,
-            pubsub: nil,
-            partitions: nil,
-            hash: nil,
-            broadcast_fun: nil,
-            opts: nil
-
   ## API
 
   @doc """
@@ -40,7 +31,7 @@ defmodule Nebulex.Streams.Server do
     {hash, opts} = Keyword.pop!(opts, :hash)
     {broadcast_fun, opts} = Keyword.pop!(opts, :broadcast_fun)
 
-    state = %__MODULE__{
+    state = %Streams{
       cache: cache,
       name: name,
       pubsub: pubsub,
@@ -59,14 +50,14 @@ defmodule Nebulex.Streams.Server do
   end
 
   @impl true
-  def handle_continue(:registered, %__MODULE__{} = state) do
+  def handle_continue(:registered, %Streams{} = state) do
     :ok = dispatch_telemetry_event(:listener_registered, state)
 
     {:noreply, state}
   end
 
   @impl true
-  def terminate(_reason, %__MODULE__{} = state) do
+  def terminate(_reason, %Streams{} = state) do
     _ = unregister_listener(state)
 
     dispatch_telemetry_event(:listener_unregistered, state)
@@ -74,7 +65,7 @@ defmodule Nebulex.Streams.Server do
 
   ## Private functions
 
-  defp register_listener(%__MODULE__{cache: cache, name: name, opts: opts} = state) do
+  defp register_listener(%Streams{cache: cache, name: name, opts: opts} = state) do
     listener = &Streams.broadcast_event/1
     opts = [metadata: Map.from_struct(state)] ++ opts
 
@@ -85,7 +76,7 @@ defmodule Nebulex.Streams.Server do
     end
   end
 
-  defp unregister_listener(%__MODULE__{cache: cache, name: name, opts: opts}) do
+  defp unregister_listener(%Streams{cache: cache, name: name, opts: opts}) do
     {id, opts} = Keyword.pop(opts, :id, &Streams.broadcast_event/1)
 
     if name do

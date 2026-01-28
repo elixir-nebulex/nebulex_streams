@@ -319,10 +319,19 @@ defmodule Nebulex.Streams.Invalidator do
     name = get_cache_name(opts)
     event_scope = Keyword.fetch!(opts, :event_scope)
 
-    metadata =
-      name
-      |> Streams.lookup_meta!()
-      |> Map.merge(%{name: name, event_scope: event_scope})
+    %Streams{
+      cache: cache,
+      pubsub: pubsub,
+      partitions: partitions
+    } = Streams.lookup!(name)
+
+    metadata = %{
+      cache: cache,
+      name: name,
+      pubsub: pubsub,
+      partitions: partitions,
+      event_scope: event_scope
+    }
 
     Supervisor.start_link(__MODULE__, metadata)
   end
@@ -349,6 +358,6 @@ defmodule Nebulex.Streams.Invalidator do
   defp get_cache_name(opts) do
     opts
     |> Keyword.get_lazy(:name, fn -> Keyword.get(opts, :cache) end)
-    |> Kernel.||(raise "Missing :name or :cache option")
+    |> Kernel.||(raise "missing :name or :cache option")
   end
 end
