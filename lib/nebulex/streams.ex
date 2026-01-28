@@ -779,14 +779,14 @@ defmodule Nebulex.Streams do
       %{...}
 
       iex> Nebulex.Streams.lookup_meta!(:not_started)
-      ** (RuntimeError) Stream server not found: :not_started
+      ** (RuntimeError) stream server not found: :not_started
 
   """
   @spec lookup_meta!(any()) :: metadata()
   def lookup_meta!(name) do
     name
     |> lookup_meta()
-    |> Kernel.||(raise "Stream server not found: #{inspect(name)}")
+    |> Kernel.||(raise "stream server not found: #{inspect(name)}")
   end
 
   @doc """

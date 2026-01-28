@@ -73,6 +73,9 @@ defmodule Nebulex.Streams.MixProject do
       {:benchee, "~> 1.5", only: [:dev, :test]},
       {:benchee_html, "~> 1.0", only: [:dev, :test]},
 
+      # Dev
+      {:usage_rules, "~> 0.1", only: :dev},
+
       # Docs
       {:ex_doc, "~> 0.39", only: [:dev, :test], runtime: false}
     ]
@@ -87,6 +90,9 @@ defmodule Nebulex.Streams.MixProject do
         "coveralls.html",
         "sobelow --exit --skip",
         "dialyzer --format short"
+      ],
+      "usage_rules.sync": [
+        "usage_rules.sync usage-rules.md --all --inline usage_rules:all --link-to-folder deps"
       ]
     ]
   end

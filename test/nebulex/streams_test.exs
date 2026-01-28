@@ -73,7 +73,7 @@ defmodule Nebulex.StreamsTest do
     end
 
     test "error: not found" do
-      assert_raise RuntimeError, ~r"Stream server not found: #{inspect(Cache)}", fn ->
+      assert_raise RuntimeError, ~r"stream server not found: #{inspect(Cache)}", fn ->
         Streams.lookup_meta!(Cache)
       end
     end
