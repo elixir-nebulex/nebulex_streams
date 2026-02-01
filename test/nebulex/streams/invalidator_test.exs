@@ -171,7 +171,10 @@ defmodule Nebulex.Streams.InvalidatorTest do
       end)
     end
 
-    test "invalidates multiple keys on delete_all event", %{cache: cache, invalidator_pid: pid} do
+    test "invalidates all keys on delete event when target is a query", %{
+      cache: cache,
+      invalidator_pid: pid
+    } do
       # Put some keys
       :ok = cache.put!("key1", "value1")
       :ok = cache.put!("key2", "value2")
@@ -190,7 +193,7 @@ defmodule Nebulex.Streams.InvalidatorTest do
         cache: cache,
         command: :delete_all,
         pid: self(),
-        target: {:query, nil},
+        target: {:q, nil},
         type: :deleted
       })
 
@@ -200,6 +203,41 @@ defmodule Nebulex.Streams.InvalidatorTest do
         refute cache.get!("key2")
         refute cache.get!("key3")
       end)
+    end
+
+    test "invalidates multiple keys on delete event when target is a query", %{
+      cache: cache,
+      invalidator_pid: pid
+    } do
+      # Put some keys
+      :ok = cache.put!("key1", "value1")
+      :ok = cache.put!("key2", "value2")
+      :ok = cache.put!("key3", "value3")
+
+      # Get the worker PID
+      worker_pid = get_worker(pid)
+
+      # Simulate the event coming from a remote node
+      Nebulex.Streams.Helpers
+      |> expect(:current_node?, fn _ -> false end)
+      |> allow(self(), worker_pid)
+
+      # Trigger a delete_all event
+      send(worker_pid, %CacheEntryEvent{
+        cache: cache,
+        command: :delete_all,
+        pid: self(),
+        target: {:in, ["key1", "key2"]},
+        type: :deleted
+      })
+
+      # Wait for the invalidation to complete
+      wait_until(fn ->
+        refute cache.get!("key1")
+        refute cache.get!("key2")
+      end)
+
+      assert cache.get!("key3") == "value3"
     end
   end
 

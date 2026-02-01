@@ -118,7 +118,12 @@ defmodule Nebulex.Streams.Invalidator.Worker do
     cache.delete(name, key, telemetry: false)
   end
 
-  defp invalidate_cache(cache, name, {:query, query}) do
+  defp invalidate_cache(cache, name, {:in, keys}) do
+    # Disable telemetry to avoid echoing the event back to the sender
+    cache.delete_all(name, [in: keys], telemetry: false)
+  end
+
+  defp invalidate_cache(cache, name, {:q, query}) do
     # Disable telemetry to avoid echoing the event back to the sender
     cache.delete_all(name, [query: query], telemetry: false)
   end
