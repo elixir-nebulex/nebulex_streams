@@ -49,10 +49,10 @@ defmodule Nebulex.StreamsTest do
 
   describe "child_spec/1" do
     test "ok: returns child spec" do
-      assert Streams.child_spec(cache: Cache) == %{
-               id: Nebulex.Streams,
-               start: {Nebulex.Streams, :start_link, [[cache: Cache]]}
-             }
+      assert %{
+               id: {Nebulex.Streams.Server, Cache},
+               start: {Nebulex.Streams.Server, :start_link, _}
+             } = Streams.child_spec(cache: Cache)
     end
   end
 
@@ -154,6 +154,12 @@ defmodule Nebulex.StreamsTest do
                           event: %CacheEntryEvent{}
                         }}
       end)
+    end
+
+    test "error: empty events list", %{cache: cache} do
+      assert_raise NimbleOptions.ValidationError,
+                   "invalid value for :events option: expected a non-empty list, got: []",
+                   fn -> cache.subscribe(events: []) end
     end
   end
 

@@ -140,15 +140,18 @@ defmodule Nebulex.Streams.Options do
       doc: """
       List of event types to subscribe to (optional).
 
-      Possible event types are: `:inserted`, `:updated`, `:deleted`, `:expired`, `:evicted`.
+      Possible event types are: `:inserted`, `:updated`, `:deleted`, `:expired`,
+      `:evicted`.
 
-      When omitted or empty, the subscriber receives all event types. Filtering to
-      specific event types reduces message overhead by avoiding unnecessary messages
-      to your handler.
+      When omitted, the subscriber receives all event types (default). When
+      provided, it must be a non-empty list; `[]` raises
+      `NimbleOptions.ValidationError`.
 
-      Default: all event types `[:inserted, :updated, :deleted, :expired, :evicted]`
+      Filtering to specific event types reduces message overhead by avoiding
+      unnecessary messages to your handler.
 
-      Example: `events: [:inserted, :deleted]` - only subscribe to insertions and deletions
+      Example: `events: [:inserted, :deleted]` - only subscribe to insertions
+      and deletions.
       """
     ],
     partition: [
@@ -157,17 +160,18 @@ defmodule Nebulex.Streams.Options do
       doc: """
       The specific partition to subscribe to (optional).
 
-      Use this only when the stream is configured with `:partitions`. By subscribing
-      to a specific partition, you receive only events routed to that partition by
-      the hash function.
+      Use this only when the stream is configured with `:partitions`. By
+      subscribing to a specific partition, you receive only events routed to
+      that partition by the hash function.
 
-      When `:partition` is omitted but the stream has `:partitions` configured, the
-      caller process is assigned to a random partition automatically.
+      When `:partition` is omitted but the stream has `:partitions` configured,
+      the caller process is assigned to a random partition automatically.
 
-      Raises `NimbleOptions.ValidationError` if the partition number is >= the total
-      number of partitions configured in the stream.
+      Raises `NimbleOptions.ValidationError` if the partition number is >= the
+      total number of partitions configured in the stream.
 
-      Example: `partition: 0` - subscribe only to partition 0 (if stream has multiple partitions)
+      Example: `partition: 0` - subscribe only to partition 0 (if stream has
+      multiple partitions).
       """
     ]
   ]
@@ -203,6 +207,13 @@ defmodule Nebulex.Streams.Options do
 
   @spec validate_subscribe_opts!(keyword()) :: keyword()
   def validate_subscribe_opts!(opts) do
-    NimbleOptions.validate!(opts, @subscribe_opts_schema)
+    opts = NimbleOptions.validate!(opts, @subscribe_opts_schema)
+
+    if Keyword.fetch!(opts, :events) == [] do
+      raise NimbleOptions.ValidationError,
+            "invalid value for :events option: expected a non-empty list, got: []"
+    else
+      opts
+    end
   end
 end

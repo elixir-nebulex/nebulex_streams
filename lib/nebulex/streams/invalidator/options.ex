@@ -9,8 +9,8 @@ defmodule Nebulex.Streams.Invalidator.Options do
       doc: """
       The Nebulex cache module to watch for invalidation.
 
-      Use this option for static caches defined in your supervision tree.
-      This option is mutually exclusive with `:name`.
+      Use this option for static caches defined in your supervision tree. If
+      both `:cache` and `:name` are provided, `:name` takes precedence.
       """
     ],
     name: [
@@ -20,8 +20,8 @@ defmodule Nebulex.Streams.Invalidator.Options do
       The instance name of a dynamic cache.
 
       Use this option when you started a dynamic cache with
-      `MyApp.Cache.start_link(name: :my_cache)`. This option is mutually
-      exclusive with `:cache`.
+      `MyApp.Cache.start_link(name: :my_cache)`. If both `:cache` and `:name`
+      are provided, this option takes precedence.
       """
     ],
     event_scope: [
@@ -67,6 +67,13 @@ defmodule Nebulex.Streams.Invalidator.Options do
 
   @spec validate!(keyword()) :: keyword()
   def validate!(opts) do
-    NimbleOptions.validate!(opts, @start_opts_schema)
+    opts = NimbleOptions.validate!(opts, @start_opts_schema)
+
+    if !Keyword.has_key?(opts, :cache) and !Keyword.has_key?(opts, :name) do
+      raise NimbleOptions.ValidationError,
+            "invalid options: expected either :cache or :name option, got neither"
+    else
+      opts
+    end
   end
 end

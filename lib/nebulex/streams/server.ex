@@ -20,6 +20,19 @@ defmodule Nebulex.Streams.Server do
     GenServer.start_link(__MODULE__, {cache, name, opts})
   end
 
+  @doc """
+  Returns the child specification for the stream server.
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    opts = Options.validate_start_opts!(opts)
+
+    %{
+      id: {__MODULE__, opts[:name] || Keyword.fetch!(opts, :cache)},
+      start: {__MODULE__, :start_link, [opts]}
+    }
+  end
+
   ## GenServer callbacks
 
   @impl true

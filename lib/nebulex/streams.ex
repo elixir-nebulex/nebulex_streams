@@ -639,12 +639,7 @@ defmodule Nebulex.Streams do
   Returns the child specification for the stream.
   """
   @spec child_spec(keyword()) :: Supervisor.child_spec()
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]}
-    }
-  end
+  defdelegate child_spec(opts \\ []), to: Server
 
   @doc """
   Subscribes the calling process to cache entry events.

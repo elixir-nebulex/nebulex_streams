@@ -31,6 +31,12 @@ defmodule Nebulex.Streams.InvalidatorTest do
       assert Process.alive?(pid)
     end
 
+    test "error: missing both :cache and :name options" do
+      assert_raise NimbleOptions.ValidationError,
+                   "invalid options: expected either :cache or :name option, got neither",
+                   fn -> Invalidator.start_link([]) end
+    end
+
     test "sets up process correctly and subscribes", %{cache: cache} do
       pid = start_supervised!({Invalidator, cache: cache, event_scope: :local})
 
