@@ -19,6 +19,9 @@ defmodule Nebulex.Streams.MixProject do
       # Dialyzer
       dialyzer: dialyzer(),
 
+      # Usage Rules
+      usage_rules: usage_rules(),
+
       # Hex
       package: package(),
       description: "Real-time event streaming for Nebulex caches",
@@ -66,18 +69,18 @@ defmodule Nebulex.Streams.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},
-      {:mimic, "~> 2.2", only: :test},
+      {:mimic, "~> 2.0", only: :test},
       {:nebulex_local, github: "elixir-nebulex/nebulex_local", branch: "main", only: :test},
 
       # Benchmark Test
       {:benchee, "~> 1.5", only: [:dev, :test]},
       {:benchee_html, "~> 1.0", only: [:dev, :test]},
 
-      # Dev
-      {:usage_rules, "~> 0.1", only: :dev},
+      # Usage Rules
+      {:usage_rules, "~> 1.0", only: [:dev]},
 
       # Docs
-      {:ex_doc, "~> 0.39", only: [:dev, :test], runtime: false}
+      {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -91,9 +94,7 @@ defmodule Nebulex.Streams.MixProject do
         "sobelow --exit --skip",
         "dialyzer --format short"
       ],
-      "usage_rules.sync": [
-        "usage_rules.sync usage-rules.md --all --inline usage_rules:all --link-to-folder deps"
-      ]
+      "ur.sync": ["usage_rules.sync"]
     ]
   end
 
@@ -121,5 +122,24 @@ defmodule Nebulex.Streams.MixProject do
 
   defp plt_file_name do
     "dialyzer-#{Mix.env()}-Elixir-#{System.version()}-OTP-#{System.otp_release()}.plt"
+  end
+
+  defp usage_rules do
+    [
+      # The file to write usage rules into (required for usage_rules syncing)
+      file: "AGENTS.md",
+
+      # rules to include directly in CLAUDE.md
+      usage_rules: ["nebulex:all"],
+
+      # Agent skills configuration
+      skills: [
+        # The location of the skills directory
+        location: ".claude/skills",
+
+        # Auto-build a "use-<pkg>" skill per dependency
+        deps: [:nebulex]
+      ]
+    ]
   end
 end

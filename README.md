@@ -2,7 +2,7 @@
 > Real-time event streaming for Nebulex caches
 
 ![CI](https://github.com/elixir-nebulex/nebulex_streams/workflows/CI/badge.svg)
-[![Codecov](https://codecov.io/gh/elixir-nebulex/nebulex_streams/graph/badge.svg)](https://codecov.io/gh/elixir-nebulex/nebulex_streams/graph/badge.svg)
+[![Codecov](https://codecov.io/gh/elixir-nebulex/nebulex_streams/graph/badge.svg)](https://codecov.io/gh/elixir-nebulex/nebulex_streams)
 [![Hex.pm](https://img.shields.io/hexpm/v/nebulex_streams.svg)](https://hex.pm/packages/nebulex_streams)
 [![Documentation](https://img.shields.io/badge/Documentation-ff69b4)](https://hexdocs.pm/nebulex_streams)
 
@@ -317,9 +317,9 @@ For detailed options and patterns, see the
 
 Contributions to Nebulex are very welcome and appreciated!
 
-Use the [issue tracker](http://github.com/elixir-nebulex/nebulex_streams)
+Use the [issue tracker](https://github.com/elixir-nebulex/nebulex_streams)
 for bug reports or feature requests. Open a
-[pull request](http://github.com/elixir-nebulex/nebulex_streams/pulls)
+[pull request](https://github.com/elixir-nebulex/nebulex_streams/pulls)
 when you are ready to contribute.
 
 When submitting a pull request you should not update the
