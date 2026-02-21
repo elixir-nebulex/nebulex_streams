@@ -59,7 +59,7 @@ defmodule Nebulex.Streams.MixProject do
 
   defp deps do
     [
-      {:nebulex, github: "elixir-nebulex/nebulex", branch: "main", override: true},
+      {:nebulex, "~> 3.0"},
       {:nimble_options, "~> 0.5 or ~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:telemetry, "~> 0.4 or ~> 1.0"},
@@ -70,7 +70,7 @@ defmodule Nebulex.Streams.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},
       {:mimic, "~> 2.0", only: :test},
-      {:nebulex_local, github: "elixir-nebulex/nebulex_local", branch: "main", only: :test},
+      {:nebulex_local, "~> 3.0", only: :test},
 
       # Benchmark Test
       {:benchee, "~> 1.5", only: [:dev, :test]},
@@ -101,8 +101,10 @@ defmodule Nebulex.Streams.MixProject do
   defp package do
     [
       name: :nebulex_streams,
+      maintainers: ["Carlos Bolanos"],
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{"GitHub" => @source_url},
+      files: ~w(lib .formatter.exs mix.exs README* CHANGELOG* LICENSE*)
     ]
   end
 
