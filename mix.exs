@@ -59,7 +59,7 @@ defmodule Nebulex.Streams.MixProject do
 
   defp deps do
     [
-      {:nebulex, "~> 3.0"},
+      {:nebulex, github: "elixir-nebulex/nebulex", branch: "main", override: true},
       {:nimble_options, "~> 0.5 or ~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:telemetry, "~> 0.4 or ~> 1.0"},

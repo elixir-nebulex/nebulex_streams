@@ -576,7 +576,7 @@ defmodule Nebulex.Streams do
   @registry Nebulex.Streams.Registry
 
   # Inline common instructions
-  @compile {:inline, registry: 0, server_name: 1}
+  @compile inline: [registry: 0, server_name: 1]
 
   ## Inherited behaviour
 
@@ -817,6 +817,12 @@ defmodule Nebulex.Streams do
   > listener system. Do not call this directly in application code.
   """
   @spec broadcast_event(Nebulex.Event.t()) :: :ok | {:error, any()}
+  def broadcast_event(event)
+
+  def broadcast_event(%CacheEntryEvent{metadata: %{extra_metadata: %{source: :nebulex_streams}}}) do
+    :ok
+  end
+
   def broadcast_event(
         %CacheEntryEvent{
           cache: cache,
@@ -825,7 +831,8 @@ defmodule Nebulex.Streams do
           metadata: %{
             pubsub: pubsub,
             partitions: partitions,
-            broadcast_fun: broadcast_fun
+            broadcast_fun: broadcast_fun,
+            extra_metadata: %{}
           }
         } = event
       ) do
