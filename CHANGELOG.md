@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.0](https://github.com/elixir-nebulex/nebulex_streams/tree/v0.2.0) (2026-03-01)
+> [Full Changelog](https://github.com/elixir-nebulex/nebulex_streams/compare/v0.1.0...v0.2.0)
+
+### Enhancements
+
+- [Nebulex.Streams.Invalidator.Worker] Preserve telemetry on cache
+  invalidation. Instead of disabling telemetry entirely to prevent
+  echo storms, invalidation commands now use a metadata marker
+  (`telemetry_metadata: %{source: :nebulex_streams}`) that is
+  filtered out at the broadcast level. This keeps stats and other
+  telemetry consumers working correctly during invalidation.
+  Requires `nebulex ~> 3.0.1`.
+  [#1](https://github.com/elixir-nebulex/nebulex_streams/issues/1).
+
 ## [v0.1.0](https://github.com/elixir-nebulex/nebulex_streams/tree/v0.1.0) (2026-02-21)
 > [Full Changelog](https://github.com/elixir-nebulex/nebulex_streams/compare/52c4174d9835e0865e3518143ec9c9d2beb122af...v0.1.0)
 
