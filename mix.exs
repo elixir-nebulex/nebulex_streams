@@ -42,7 +42,7 @@ defmodule Nebulex.Streams.MixProject do
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test,
-        "test.ci": :test
+        precommit: :test
       ]
     ]
   end
@@ -70,6 +70,7 @@ defmodule Nebulex.Streams.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.16", only: [:dev, :test], runtime: false},
       {:mimic, "~> 2.4", only: :test},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:nebulex_local, "~> 3.1", only: :test},
 
       # Benchmark Test
@@ -86,13 +87,16 @@ defmodule Nebulex.Streams.MixProject do
 
   defp aliases do
     [
-      "test.ci": [
+      precommit: [
+        "deps.unlock --check-unused",
+        "deps.audit",
         "compile --warnings-as-errors",
         "format --check-formatted",
         "credo --strict",
         "coveralls.html",
-        "sobelow --exit --skip",
-        "dialyzer --format short"
+        "sobelow --skip --exit Low",
+        "dialyzer --format short",
+        "docs --warnings-as-errors"
       ],
       "ur.sync": ["usage_rules.sync"]
     ]
