@@ -59,18 +59,18 @@ defmodule Nebulex.Streams.MixProject do
 
   defp deps do
     [
-      {:nebulex, "~> 3.0.1"},
+      {:nebulex, "~> 3.0 and >= 3.0.1"},
       {:nimble_options, "~> 0.5 or ~> 1.0"},
-      {:phoenix_pubsub, "~> 2.1"},
+      {:phoenix_pubsub, "~> 2.4"},
       {:telemetry, "~> 0.4 or ~> 1.0"},
 
       # Test & Code Analysis
       {:excoveralls, "~> 0.18", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},
-      {:mimic, "~> 2.0", only: :test},
-      {:nebulex_local, "~> 3.0", only: :test},
+      {:sobelow, "~> 0.16", only: [:dev, :test], runtime: false},
+      {:mimic, "~> 2.4", only: :test},
+      {:nebulex_local, "~> 3.1", only: :test},
 
       # Benchmark Test
       {:benchee, "~> 1.5", only: [:dev, :test]},
