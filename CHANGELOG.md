@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.1](https://github.com/elixir-nebulex/nebulex_streams/tree/v0.2.1) (2026-10-18)
+> [Full Changelog](https://github.com/elixir-nebulex/nebulex_streams/compare/v0.2.0...v0.2.1)
+
+### Enhancements
+
+- Added support for Nebulex v3.1. The `nebulex` requirement is now
+  `~> 3.0 and >= 3.0.1`, so the 3.0.x releases from 3.0.1 on keep working.
+
 ## [v0.2.0](https://github.com/elixir-nebulex/nebulex_streams/tree/v0.2.0) (2026-03-01)
 > [Full Changelog](https://github.com/elixir-nebulex/nebulex_streams/compare/v0.1.0...v0.2.0)
 

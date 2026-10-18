@@ -28,7 +28,7 @@ Add `nebulex_streams` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:nebulex_streams, "~> 0.1"}
+    {:nebulex_streams, "~> 0.2"}
   ]
 end
 ```
